@@ -117,9 +117,32 @@ vercel.json               # cron registration
 
 ---
 
+## Data ingestion (how the pool stays fresh)
+
+Two engines run in `/api/ingest` (daily Vercel Cron, or manually from `/admin`):
+
+1. **RSS** (`lib/ingest-rss.ts`) — fetches the free RSS feeds (Fierce Biotech,
+   BioPharma Dive, MedTech Dive…) in parallel, then Claude (Haiku) classifies +
+   translates each headline into the bilingual `Signal` schema. Cheap, reliable,
+   no per-user credentials — this is the engine that grows the pool every day.
+2. **Web search** — per-source targeted web search (Sonnet + web_search tool) for
+   sources without RSS (events, VC firms, China), capped to fit the time budget.
+
+Results are deduped by id and upserted into Supabase. **Without a Supabase
+service-role key the endpoint runs in preview mode** (structures items and returns
+them in the response without persisting) — handy for testing with just an
+Anthropic key. Source pools, including gated BYO-credential sources, are defined
+in `lib/sources.ts`.
+
+Trigger manually:
+```bash
+curl -X POST "https://<your-app>/api/ingest?secret=$CRON_SECRET"
+# options in JSON body: { "sources": ["fierce-biotech"], "skipWeb": true }
+```
+
 ## Roadmap ideas
 
-- Supabase Auth → sync prefs & saved items across devices
+- Supabase Auth → sync prefs, saved items & connections across devices
+- Gated-source API adapters (Crunchbase, PitchBook, NewsAPI) behind BYO credentials
 - Email / push digests (tie into the scheduled-task flow)
-- Per-source connectors (RSS, official APIs) alongside AI web-search
 - "Compare lenses" side-by-side view

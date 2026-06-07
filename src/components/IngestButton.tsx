@@ -17,11 +17,18 @@ export function IngestButton() {
         { method: "POST" }
       );
       const data = await res.json();
-      setStatus(
-        data.ok
-          ? `✓ Ingested ${data.ingested ?? 0} signals${data.note ? ` (${data.note})` : ""}`
-          : `✗ ${data.reason ?? data.error ?? "failed"}`
-      );
+      if (!data.ok) {
+        setStatus(`✗ ${data.reason ?? data.error ?? "failed"}`);
+      } else if (data.persisted === false) {
+        const n = data.stats?.deduped ?? data.preview?.length ?? 0;
+        setStatus(
+          `✓ Pipeline ran — structured ${n} signals (preview only; add Supabase service-role key to persist). RSS fetched: ${data.stats?.rssFetched ?? 0}`
+        );
+      } else {
+        setStatus(
+          `✓ Ingested ${data.ingested ?? 0} signals (RSS fetched ${data.stats?.rssFetched ?? 0}, candidates ${data.stats?.candidates ?? 0})`
+        );
+      }
     } catch (e) {
       setStatus(`✗ ${String(e)}`);
     } finally {
