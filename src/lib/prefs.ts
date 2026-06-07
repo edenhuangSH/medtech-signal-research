@@ -51,6 +51,62 @@ export function usePrefs() {
   return { prefs, update, hydrated, onboarded, setOnboarded, completeOnboarding };
 }
 
+// ── Connections (BYO credentials for gated sources) ──────────────────────────
+// Stored locally for the MVP. Production: move to Supabase, encrypted at rest,
+// per-user, server-side only — never exposed to the client bundle. The shape is
+// designed for that migration (value is treated as a secret).
+const CONN_KEY = "helix.connections.v1";
+
+export interface Connection {
+  sourceId: string;
+  /** The credential (API key / token / cookie). Secret. */
+  value: string;
+  addedAt: string;
+}
+
+export function useConnections() {
+  const [connections, setConnections] = useState<Record<string, Connection>>({});
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CONN_KEY);
+      if (raw) setConnections(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  const persist = (next: Record<string, Connection>) => {
+    try {
+      localStorage.setItem(CONN_KEY, JSON.stringify(next));
+    } catch {}
+    setConnections(next);
+  };
+
+  const connect = useCallback((sourceId: string, value: string) => {
+    setConnections((prev) => {
+      const next = {
+        ...prev,
+        [sourceId]: { sourceId, value, addedAt: new Date().toISOString() },
+      };
+      try {
+        localStorage.setItem(CONN_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const disconnect = useCallback((sourceId: string) => {
+    setConnections((prev) => {
+      const next = { ...prev };
+      delete next[sourceId];
+      try {
+        localStorage.setItem(CONN_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  return { connections, connect, disconnect };
+}
+
 // ── Saved signals (bookmarks) ────────────────────────────────────────────────
 const SAVED_KEY = "helix.saved.v1";
 

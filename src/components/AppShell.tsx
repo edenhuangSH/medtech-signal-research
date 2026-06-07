@@ -3,15 +3,20 @@
 import { useMemo, useState, useEffect } from "react";
 import type { Signal } from "@/lib/types";
 import { rankSignals, summarize } from "@/lib/scoring";
-import { usePrefs, useSaved } from "@/lib/prefs";
+import { usePrefs, useSaved, useConnections } from "@/lib/prefs";
 import { t } from "@/lib/i18n";
 import { SIGNAL_TYPE_LABEL, INTENT_LABEL } from "@/lib/taxonomy";
+import {
+  enabledSourceIdSet,
+  resolveSourceId,
+} from "@/lib/sources";
 import { TopBar } from "./TopBar";
 import { LensBar } from "./LensBar";
 import { FilterBar, type Filters } from "./FilterBar";
 import { SignalCard } from "./SignalCard";
 import { Onboarding } from "./Onboarding";
 import { DigestModal } from "./DigestModal";
+import { SourcesPanel } from "./SourcesPanel";
 
 const DEFAULT_FILTERS: Filters = {
   types: [],
@@ -31,12 +36,37 @@ export function AppShell({
   const { prefs, update, hydrated, onboarded, completeOnboarding, setOnboarded } =
     usePrefs();
   const { saved, toggle } = useSaved();
+  const { connections, connect, disconnect } = useConnections();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showDigest, setShowDigest] = useState(false);
+  const [showSources, setShowSources] = useState(false);
   const [savedOnly, setSavedOnly] = useState(false);
 
   const lang = prefs.lang;
+
+  // Which sources are currently in the pool (respects overrides + connections).
+  const connectedIds = useMemo(
+    () => new Set(Object.keys(connections)),
+    [connections]
+  );
+  const enabledIds = useMemo(
+    () => enabledSourceIdSet(prefs.sourceOverrides ?? {}, connectedIds),
+    [prefs.sourceOverrides, connectedIds]
+  );
+
+  // Per-source counts across the full dataset (for the Sources panel).
+  const sourceCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const s of signals) {
+      const id = resolveSourceId(s.source_id);
+      m[id] = (m[id] ?? 0) + 1;
+    }
+    return m;
+  }, [signals]);
+
+  const setSourceOverride = (id: string, on: boolean) =>
+    update({ sourceOverrides: { ...(prefs.sourceOverrides ?? {}), [id]: on } });
 
   // First-visit onboarding
   useEffect(() => {
@@ -49,6 +79,8 @@ export function AppShell({
   // 2. Apply filters + sort
   const visible = useMemo(() => {
     let arr = ranked;
+    // Source pool filter — only draw from enabled sources.
+    arr = arr.filter((s) => enabledIds.has(resolveSourceId(s.signal.source_id)));
     if (savedOnly) arr = arr.filter((s) => saved.includes(s.signal.id));
     if (filters.types.length)
       arr = arr.filter((s) => filters.types.includes(s.signal.type));
@@ -80,7 +112,7 @@ export function AppShell({
     else if (filters.sort === "importance")
       arr = [...arr].sort((a, b) => b.signal.importance - a.signal.importance);
     return arr;
-  }, [ranked, filters, saved, savedOnly]);
+  }, [ranked, filters, saved, savedOnly, enabledIds]);
 
   const stats = useMemo(() => summarize(ranked), [ranked]);
 
@@ -99,6 +131,8 @@ export function AppShell({
         onToggleLang={() => update({ lang: lang === "zh" ? "en" : "zh" })}
         onPersonalize={() => setShowOnboarding(true)}
         onDigest={() => setShowDigest(true)}
+        onSources={() => setShowSources(true)}
+        enabledSources={enabledIds.size}
       />
 
       <main className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
@@ -228,6 +262,18 @@ export function AppShell({
         scored={visible}
         lang={lang}
         intent={prefs.intent}
+      />
+
+      <SourcesPanel
+        open={showSources}
+        onClose={() => setShowSources(false)}
+        lang={lang}
+        overrides={prefs.sourceOverrides ?? {}}
+        setOverride={setSourceOverride}
+        connections={connections}
+        connect={connect}
+        disconnect={disconnect}
+        counts={sourceCounts}
       />
     </div>
   );

@@ -40,6 +40,8 @@ export interface Signal {
   topics: string[];
 
   source_url: string | null;
+  /** Catalog source this signal came from (see lib/sources.ts). */
+  source_id?: string | null;
   /** Editorial importance 1–5, independent of the per-user priority score. */
   importance: number;
 
@@ -82,6 +84,12 @@ export interface UserPrefs {
   lang: Lang;
   /** Selected lens for the current session. */
   intent: Intent;
+  /**
+   * Per-source on/off overrides keyed by source id. A source not present here
+   * uses its catalog `defaultOn`. Gated sources additionally require a stored
+   * connection before they count as enabled. Robust to the catalog growing.
+   */
+  sourceOverrides: Record<string, boolean>;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -91,4 +99,5 @@ export const DEFAULT_PREFS: UserPrefs = {
   topics: [],
   lang: "zh",
   intent: "overview",
+  sourceOverrides: {},
 };

@@ -16,6 +16,7 @@ create table if not exists public.signals (
   region          text not null default 'global',
   topics          text[] not null default '{}',
   source_url      text,
+  source_id       text,
   importance      int not null default 3 check (importance between 1 and 5),
   format          text check (format in ('offline','online')),
   language        text check (language in ('en','zh','both')),

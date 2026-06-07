@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Languages, SlidersHorizontal, FileDown } from "lucide-react";
+import { Activity, Languages, SlidersHorizontal, FileDown, Globe } from "lucide-react";
 import type { Lang } from "@/lib/types";
 import { t, STRINGS } from "@/lib/i18n";
 
@@ -9,11 +9,15 @@ export function TopBar({
   onToggleLang,
   onPersonalize,
   onDigest,
+  onSources,
+  enabledSources,
 }: {
   lang: Lang;
   onToggleLang: () => void;
   onPersonalize: () => void;
   onDigest: () => void;
+  onSources: () => void;
+  enabledSources: number;
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-bg/80 backdrop-blur-md">
@@ -33,6 +37,18 @@ export function TopBar({
         </div>
 
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onSources}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-ink transition-colors hover:bg-surface-2"
+            title={t("sourcePool", lang)}
+          >
+            <Globe className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{t("sources", lang)}</span>
+            <span className="rounded-full bg-accent-soft px-1.5 text-[10px] font-bold text-accent">
+              {enabledSources}
+            </span>
+          </button>
           <button
             type="button"
             onClick={onDigest}

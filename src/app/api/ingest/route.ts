@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { SOURCES, SOURCE_BY_ID } from "@/lib/sources";
 
 // ── Automated ingestion (Vercel Cron) ────────────────────────────────────────
 // Uses Claude's web_search tool to gather fresh life-science/medtech signals,
@@ -54,31 +55,56 @@ async function run(req: NextRequest) {
 
   const client = new Anthropic({ apiKey: key });
 
-  const prompt = `Search the web for the most recent (last 14 days) life-science / biotech / medtech / digital-health market signals across these categories: new VC funding rounds, M&A deals, incubator/accelerator cohort announcements (Y Combinator, Flagship Pioneering, F-Prime, Sequoia, IndieBio), flagship research reports, and upcoming industry events/conferences.
-
-Prioritize signals from top global institutions and pay special attention to neurotech / neuromodulation.
-
-After searching, output ONLY a JSON array (no prose) of the items you found, following this schema exactly:
-${INGEST_SCHEMA}
-
-Aim for 10-20 high-quality, real, verifiable items with working source_url links.`;
-
-  let items: any[] = [];
+  // Which sources to ingest from. Body may pass {sources:[ids]}; default = free,
+  // searchable sources. Gated sources are skipped here (they'd run per-user with
+  // the user's own credentials in a production worker). Capped to fit maxDuration.
+  let requested: string[] = [];
   try {
-    const msg = await client.messages.create({
-      model: MODEL,
-      max_tokens: 8000,
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 8 } as any],
-      messages: [{ role: "user", content: prompt }],
-    });
-    const text = msg.content
-      .filter((c) => c.type === "text")
-      .map((c: any) => c.text)
-      .join("\n");
-    const match = text.match(/\[[\s\S]*\]/);
-    if (match) items = JSON.parse(match[0]);
-  } catch (e) {
-    return NextResponse.json({ ok: false, reason: "search failed", error: String(e) });
+    const body = await req.json();
+    if (Array.isArray(body?.sources)) requested = body.sources;
+  } catch {}
+  const targets = (
+    requested.length
+      ? requested.map((id) => SOURCE_BY_ID[id]).filter(Boolean)
+      : SOURCES.filter(
+          (s) => !s.requiresAuth && s.method !== "rss" && s.query && s.id !== "other-web"
+        )
+  ).slice(0, 8);
+
+  // One targeted web search per source, tagged with its source_id.
+  const items: any[] = [];
+  const perSource: Record<string, number> = {};
+  for (const src of targets) {
+    const prompt = `Search the web for the most recent (last 21 days) life-science / biotech / medtech / digital-health market signals from this source: ${src.name} (${src.homepage}).
+Focus query: ${src.query}
+Pay special attention to neurotech / neuromodulation when relevant.
+
+Output ONLY a JSON array (no prose) following this schema exactly:
+${INGEST_SCHEMA}
+Set "source_id" to "${src.id}" on every item. Aim for 4-8 real, verifiable items with working source_url links.`;
+    try {
+      const msg = await client.messages.create({
+        model: MODEL,
+        max_tokens: 4000,
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 } as any],
+        messages: [{ role: "user", content: prompt }],
+      });
+      const text = msg.content
+        .filter((c) => c.type === "text")
+        .map((c: any) => c.text)
+        .join("\n");
+      const match = text.match(/\[[\s\S]*\]/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        for (const it of parsed) {
+          if (it) it.source_id = it.source_id ?? src.id;
+        }
+        items.push(...parsed);
+        perSource[src.id] = parsed.length;
+      }
+    } catch {
+      perSource[src.id] = -1; // mark failure, continue with other sources
+    }
   }
 
   // Normalize + dedupe-friendly id from source_url.
@@ -99,17 +125,19 @@ Aim for 10-20 high-quality, real, verifiable items with working source_url links
       region: it.region ?? "global",
       topics: Array.isArray(it.topics) ? it.topics : [],
       source_url: it.source_url,
+      source_id: it.source_id ?? null,
       importance: it.importance ?? 3,
       format: it.format ?? null,
       language: it.language ?? null,
     }));
 
-  if (!rows.length) return NextResponse.json({ ok: true, ingested: 0, note: "no items parsed" });
+  if (!rows.length)
+    return NextResponse.json({ ok: true, ingested: 0, perSource, note: "no items parsed" });
 
   const { error } = await sb.from("signals").upsert(rows, { onConflict: "id" });
   if (error) return NextResponse.json({ ok: false, reason: "db upsert failed", error: error.message });
 
-  return NextResponse.json({ ok: true, ingested: rows.length });
+  return NextResponse.json({ ok: true, ingested: rows.length, perSource });
 }
 
 function slug(url: string, title: string): string {

@@ -71,6 +71,27 @@ export const STRINGS = {
   empty: { en: "No signals match. Loosen your filters.", zh: "没有匹配信号，放宽筛选试试。" },
   loading: { en: "Loading signals…", zh: "加载信号中…" },
 
+  // Sources / pool
+  sources: { en: "Sources", zh: "信号源" },
+  sourcePool: { en: "Source pool", zh: "信号源池" },
+  sourcePoolSub: {
+    en: "Choose which sources feed your signals. Connect private accounts to unlock gated data.",
+    zh: "选择从哪些来源拉取信号。连接私有账号可解锁付费/登录数据。",
+  },
+  enableAll: { en: "Enable all", zh: "全部启用" },
+  disableAll: { en: "Disable all", zh: "全部停用" },
+  connect: { en: "Connect", zh: "连接" },
+  connected: { en: "Connected", zh: "已连接" },
+  disconnect: { en: "Disconnect", zh: "断开" },
+  needsConnection: { en: "Needs your account", zh: "需连接账号" },
+  enterCredential: { en: "Paste your credential", zh: "粘贴你的凭证" },
+  credentialNote: {
+    en: "Stored locally for now. Used only to fetch from this source. Never shared.",
+    zh: "目前仅存于本地,仅用于从该源拉取,不会分享。",
+  },
+  sourcesEnabled: { en: "sources on", zh: "个源启用" },
+  poolStatus: { en: "in pool", zh: "在池中" },
+
   // Misc
   refresh: { en: "Refresh data", zh: "刷新数据" },
   lastUpdated: { en: "Updated", zh: "更新于" },
